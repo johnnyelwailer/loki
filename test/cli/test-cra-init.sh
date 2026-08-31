@@ -23,23 +23,29 @@ cd generated
 rm -rf create-react-app || true
 yarn create react-app create-react-app
 cd create-react-app
-npx -p @storybook/cli sb init
+npx storybook@latest init --yes --package-manager=yarn1 --type react_scripts
 yarn add loki
 ../../../../node_modules/.bin/loki init
 
 # Ensure modifications has been made
+if command -v docker > /dev/null 2>&1; then
+  DEFAULT_TARGET=chrome.docker
+else
+  DEFAULT_TARGET=chrome.app
+fi
+
 assert_contains "package.json" "$(cat <<-END
   "loki": {
     "configurations": {
       "chrome.laptop": {
-        "target": "chrome.docker",
+        "target": "${DEFAULT_TARGET}",
         "width": 1366,
         "height": 768,
         "deviceScaleFactor": 1,
         "mobile": false
       },
       "chrome.iphone7": {
-        "target": "chrome.docker",
+        "target": "${DEFAULT_TARGET}",
         "preset": "iPhone 7"
       }
     }

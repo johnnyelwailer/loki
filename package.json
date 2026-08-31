@@ -13,6 +13,7 @@
     "pretest": "cd examples/running-renderer-aws-lambda && yarn build && yarn start",
     "test": "jest",
     "test-ci": "jest --testLocationInResults --ci --outputFile=test_results.json --json",
+    "check:storybook": "node scripts/check-storybook-compatibility.js",
     "publish-docs": "GIT_USER=oblador yarn workspace @loki/website publish-gh-pages"
   },
   "engines": {
