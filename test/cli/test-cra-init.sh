@@ -61,7 +61,7 @@ cp ../../fixtures/chrome_laptop_Welcome_to_Storybook.png ./.loki/reference
 yarn storybook --no-open 2> error.log > output.log &
 STORYBOOK_PID=$!
 
-yarn loki test laptop --requireReference --storiesFilter Welcome --reactUri http://localhost:6006
+../../../../node_modules/.bin/loki test laptop --requireReference --storiesFilter Welcome --reactUri http://localhost:6006
 
 kill $STORYBOOK_PID
 
