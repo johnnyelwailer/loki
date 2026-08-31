@@ -1,41 +1,41 @@
 /* eslint-disable no-underscore-dangle */
 
-const blockedParams = [
-  'actions',
-  'argTypes',
-  'backgrounds',
-  'controls',
-  'docs',
-  'framework',
-  'storySource',
-];
-
-const isSerializable = (value) => {
-  try {
-    return JSON.stringify(value) !== undefined;
-  } catch (_e) {
-    return false;
-  }
-};
-
-const normalizeStories = (stories) =>
-  stories
-    .map((component) => ({
-      id: component.id,
-      kind: component.kind,
-      story: component.story,
-      parameters: Object.fromEntries(
-        Object.entries(component.parameters || {}).filter(
-          ([key, value]) =>
-            !key.startsWith('__') &&
-            !blockedParams.includes(key) &&
-            isSerializable(value)
-        )
-      ),
-    }))
-    .filter(({ parameters }) => !parameters.loki || !parameters.loki.skip);
-
 const getStories = async (window) => {
+  const blockedParams = [
+    'actions',
+    'argTypes',
+    'backgrounds',
+    'controls',
+    'docs',
+    'framework',
+    'storySource',
+  ];
+
+  const isSerializable = (value) => {
+    try {
+      return JSON.stringify(value) !== undefined;
+    } catch (_e) {
+      return false;
+    }
+  };
+
+  const normalizeStories = (stories) =>
+    stories
+      .map((component) => ({
+        id: component.id,
+        kind: component.kind,
+        story: component.story,
+        parameters: Object.fromEntries(
+          Object.entries(component.parameters || {}).filter(
+            ([key, value]) =>
+              !key.startsWith('__') &&
+              !blockedParams.includes(key) &&
+              isSerializable(value)
+          )
+        ),
+      }))
+      .filter(({ parameters }) => !parameters.loki || !parameters.loki.skip);
+
   const preview = window.__STORYBOOK_PREVIEW__;
   const clientApi = window.__STORYBOOK_CLIENT_API__;
 

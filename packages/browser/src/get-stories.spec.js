@@ -1,3 +1,4 @@
+const vm = require('vm');
 const getStories = require('./get-stories');
 
 describe('getStories', () => {
@@ -50,6 +51,32 @@ describe('getStories', () => {
               parameters: {},
             },
           ],
+        },
+      })
+    ).resolves.toEqual([
+      {
+        id: 'button--primary',
+        kind: 'Button',
+        story: 'Primary',
+        parameters: {},
+      },
+    ]);
+  });
+
+  it('keeps helper functions available when executed in the browser context', async () => {
+    const browserGetStories = vm.runInNewContext(`(${getStories.toString()})`);
+
+    await expect(
+      browserGetStories({
+        __STORYBOOK_PREVIEW__: {
+          extract: async () => ({
+            'button--primary': {
+              id: 'button--primary',
+              kind: 'Button',
+              story: 'Primary',
+              parameters: {},
+            },
+          }),
         },
       })
     ).resolves.toEqual([
