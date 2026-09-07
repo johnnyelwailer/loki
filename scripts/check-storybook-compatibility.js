@@ -19,6 +19,14 @@ const checks = [
     file: 'packages/integration-vue/package.json',
     dependency: '@storybook/vue',
   },
+  {
+    file: 'packages/integration-vue/package.json',
+    dependency: '@storybook/vue-vite',
+  },
+  {
+    file: 'packages/integration-vue/package.json',
+    dependency: '@storybook/vue3-vite',
+  },
 ];
 
 const repositoryRoot = path.resolve(__dirname, '..');
