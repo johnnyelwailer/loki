@@ -1,17 +1,6 @@
 /* eslint-disable no-underscore-dangle */
 
 const getStories = async (window) => {
-  const getStorybook =
-    (window.__STORYBOOK_CLIENT_API__ && window.__STORYBOOK_CLIENT_API__.raw) ||
-    (window.__STORYBOOK_PREVIEW__ &&
-      window.__STORYBOOK_PREVIEW__.extract &&
-      window.__STORYBOOK_PREVIEW__.storyStore.raw) ||
-    (window.loki && window.loki.getStorybook);
-  if (!getStorybook) {
-    throw new Error(
-      "Unable to get stories. Try adding `import 'loki/configure-react'` to your .storybook/preview.js file."
-    );
-  }
   const blockedParams = [
     'actions',
     'argTypes',
@@ -24,21 +13,14 @@ const getStories = async (window) => {
 
   const isSerializable = (value) => {
     try {
-      JSON.stringify(value);
-      return true;
+      return JSON.stringify(value) !== undefined;
     } catch (_e) {
       return false;
     }
   };
 
-  if (window.__STORYBOOK_PREVIEW__ && window.__STORYBOOK_PREVIEW__.extract) {
-    // New official API to extract stories from preview
-    await window.__STORYBOOK_PREVIEW__.extract();
-
-    // Deprecated, will be removed in V9
-    const stories = window.__STORYBOOK_PREVIEW__.storyStore.raw();
-
-    return stories
+  const normalizeStories = (stories) =>
+    stories
       .map((component) => ({
         id: component.id,
         kind: component.kind,
@@ -53,30 +35,42 @@ const getStories = async (window) => {
         ),
       }))
       .filter(({ parameters }) => !parameters.loki || !parameters.loki.skip);
+
+  const preview = window.__STORYBOOK_PREVIEW__;
+  const clientApi = window.__STORYBOOK_CLIENT_API__;
+
+  if (preview && typeof preview.extract === 'function') {
+    // Storybook 9 removed the StoryStore and its raw() method. The preview API
+    // is the supported way to read all stories from Storybook 8 onward.
+    if (typeof preview.ready === 'function') {
+      await preview.ready();
+    }
+
+    const extracted = await preview.extract();
+    return normalizeStories(
+      Array.isArray(extracted) ? extracted : Object.values(extracted || {})
+    );
+  }
+
+  const getStorybook =
+    (clientApi && clientApi.raw) ||
+    (preview && preview.storyStore && preview.storyStore.raw) ||
+    (window.loki && window.loki.getStorybook);
+  if (!getStorybook) {
+    throw new Error(
+      "Unable to get stories. Try adding `import 'loki/configure-react'` to your .storybook/preview.js file."
+    );
   }
 
   if (
-    window.__STORYBOOK_CLIENT_API__.storyStore &&
-    window.__STORYBOOK_CLIENT_API__.storyStore.cacheAllCSFFiles
+    clientApi &&
+    clientApi.storyStore &&
+    clientApi.storyStore.cacheAllCSFFiles
   ) {
-    await window.__STORYBOOK_CLIENT_API__.storyStore.cacheAllCSFFiles();
+    await clientApi.storyStore.cacheAllCSFFiles();
   }
 
-  return getStorybook()
-    .map((component) => ({
-      id: component.id,
-      kind: component.kind,
-      story: component.story,
-      parameters: Object.fromEntries(
-        Object.entries(component.parameters || {}).filter(
-          ([key, value]) =>
-            !key.startsWith('__') &&
-            !blockedParams.includes(key) &&
-            isSerializable(value)
-        )
-      ),
-    }))
-    .filter(({ parameters }) => !parameters.loki || !parameters.loki.skip);
+  return normalizeStories(getStorybook());
 };
 
 module.exports = getStories;
