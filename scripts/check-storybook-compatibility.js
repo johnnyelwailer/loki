@@ -4,6 +4,10 @@ const { execFileSync } = require('child_process');
 
 const checks = [
   {
+    file: 'packages/loki/package.json',
+    dependency: '@storybook/react',
+  },
+  {
     file: 'packages/integration-react/package.json',
     dependency: '@storybook/react',
   },
