@@ -1,7 +1,28 @@
-/* eslint-disable import/no-extraneous-dependencies, import/no-unresolved, global-require */
+/* eslint-disable import/no-dynamic-require, import/no-extraneous-dependencies, import/no-unresolved, global-require, no-underscore-dangle */
 
-const storybook = require('@storybook/react-native');
-const addons = require('@storybook/addons').default;
+function loadOptionalModule(name) {
+  try {
+    return require(name);
+  } catch (error) {
+    if (
+      error &&
+      error.code === 'MODULE_NOT_FOUND' &&
+      typeof error.message === 'string' &&
+      error.message.includes(name)
+    ) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+const storybookModule = loadOptionalModule('@storybook/react-native');
+const storybook =
+  storybookModule && (storybookModule.default || storybookModule);
+const addonsModule = loadOptionalModule('@storybook/addons');
+const addons =
+  addonsModule && (addonsModule.default || addonsModule.addons || addonsModule);
 const ReactNative = require('react-native');
 const ExceptionsManager = require('react-native/Libraries/Core/ExceptionsManager');
 const readyStateManager = require('./ready-state-manager');
@@ -52,14 +73,31 @@ async function getPrettyError(error) {
   };
 }
 
+function getCurrentStorybookChannel() {
+  if (global.view && global.view._channel) {
+    return global.view._channel;
+  }
+  if (global.__STORYBOOK_ADDONS_CHANNEL__) {
+    return global.__STORYBOOK_ADDONS_CHANNEL__;
+  }
+  if (addons && typeof addons.getChannel === 'function') {
+    return addons.getChannel();
+  }
+  return undefined;
+}
+
 function getAddonsChannel() {
   return new Promise((resolve, reject) => {
     let tries = 0;
     const attemptChannel = () => {
       tries++;
       try {
-        const channel = addons.getChannel();
-        resolve(channel);
+        const channel = getCurrentStorybookChannel();
+        if (channel) {
+          resolve(channel);
+          return;
+        }
+        throw new Error('Storybook channel is not available yet');
       } catch (error) {
         if (tries < 10) {
           setTimeout(attemptChannel, 100);
@@ -70,7 +108,7 @@ function getAddonsChannel() {
         }
       }
     };
-    attemptChannel();
+    setTimeout(attemptChannel, 0);
   });
 }
 
@@ -81,6 +119,79 @@ function isSerializable(value) {
   } catch (_e) {
     return false;
   }
+}
+
+function normalizeStories(stories) {
+  return stories
+    .map((component) => ({
+      id: component.id,
+      kind: component.kind,
+      story: component.story,
+      parameters: Object.fromEntries(
+        Object.entries(component.parameters || {}).filter(
+          ([key, value]) => !key.startsWith('__') && isSerializable(value)
+        )
+      ),
+    }))
+    .filter(({ parameters }) => !parameters.loki || !parameters.loki.skip);
+}
+
+async function getModernStories() {
+  const { view } = global;
+  if (!view || !view._storyIndex || !view._preview) {
+    return undefined;
+  }
+
+  if (typeof view.createPreparedStoryMapping === 'function') {
+    await view.createPreparedStoryMapping();
+  }
+
+  const { entries: storyEntries } = view._storyIndex;
+  const entries = Object.values(storyEntries || {}).filter(
+    (entry) => !entry.type || entry.type === 'story'
+  );
+  const stories = await Promise.all(
+    entries.map(async (entry) => {
+      const preparedStory = view._idToPrepared && view._idToPrepared[entry.id];
+      const context =
+        preparedStory && typeof view._preview.getStoryContext === 'function'
+          ? await view._preview.getStoryContext(preparedStory)
+          : {};
+
+      return {
+        id: entry.id,
+        kind: context.kind || context.title || entry.title,
+        story: context.story || context.name || entry.name,
+        parameters: context.parameters || entry.parameters || {},
+      };
+    })
+  );
+
+  return normalizeStories(stories);
+}
+
+async function getStorybookStories() {
+  const preview = global.__STORYBOOK_PREVIEW__;
+  if (preview && typeof preview.extract === 'function') {
+    if (typeof preview.ready === 'function') {
+      await preview.ready();
+    }
+    const extracted = await preview.extract();
+    return normalizeStories(
+      Array.isArray(extracted) ? extracted : Object.values(extracted || {})
+    );
+  }
+
+  const modernStories = await getModernStories();
+  if (modernStories) {
+    return modernStories;
+  }
+
+  if (storybook && typeof storybook.raw === 'function') {
+    return normalizeStories(await storybook.raw());
+  }
+
+  throw new Error('Unable to get stories from React Native Storybook');
 }
 
 async function configureStorybook() {
@@ -99,8 +210,9 @@ async function configureStorybook() {
   const on = (eventName, callback) =>
     channel.on(`${MESSAGE_PREFIX}${eventName}`, (params) => {
       if (params && params.platform === platform) {
-        callback(params);
+        return callback(params);
       }
+      return undefined;
     });
 
   const emit = (eventName, params = {}) =>
@@ -161,22 +273,9 @@ async function configureStorybook() {
     emit('didRestore');
   });
 
-  on('getStories', () => {
-    const stories = storybook
-      .raw()
-      .map((component) => ({
-        id: component.id,
-        kind: component.kind,
-        story: component.story,
-        parameters: Object.fromEntries(
-          Object.entries(component.parameters || {}).filter(
-            ([key, value]) => !key.startsWith('__') && isSerializable(value)
-          )
-        ),
-      }))
-      .filter(({ parameters }) => !parameters.loki || !parameters.loki.skip);
-    emit('setStories', { stories });
-  });
+  on('getStories', () =>
+    getStorybookStories().then((stories) => emit('setStories', { stories }))
+  );
 
   channel.on('setCurrentStory', async () => {
     try {
